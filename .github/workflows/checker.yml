@@ -38,8 +38,11 @@ jobs:
       # 5. Запускаем скрипт
       # Убедитесь, что в корне репозитория лежит файл proxies.txt с вашими прокси!
       - name: Run Proxy Checker
-        run: python proxy_checker_xray.py
-
+        env:
+          PYTHONUNBUFFERED: 1  # Это заставит логи появляться сразу
+        run: |
+          mkdir -p working_proxies
+          python proxy_checker_xray.py
       # 6. Сохраняем результаты (папку working_proxies) как артефакт
       # Вы сможете скачать её zip-архивом после завершения проверки
       - name: Upload Results
