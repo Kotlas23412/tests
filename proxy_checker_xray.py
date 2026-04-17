@@ -202,33 +202,24 @@ async def check_proxy(proxy_url: str, test_domains: List[str], xray_path: str, m
 
 
 async def batch_check_proxies(proxy_list: List[str], test_domains: List[str], xray_path: str) -> List[ProxyResult]:
-    semaphore = asyncio.Semaphore(5)
+    # Увеличиваем до 20 параллельных проверок для скорости
+    semaphore = asyncio.Semaphore(20) 
+    
     async def sem_check(url, i):
         async with semaphore:
-            print(f"[{i+1}/{len(proxy_list)}] Проверка {url[:40]}...")
+            # flush=True заставляет текст появляться в GitHub Actions мгновенно
+            print(f"[{i+1}/{len(proxy_list)}] Проверка {url[:40]}...", flush=True)
             return await check_proxy(url, test_domains, xray_path)
 
     tasks = [sem_check(url, i) for i, url in enumerate(proxy_list)]
     results = await asyncio.gather(*tasks)
     return [r for r in results if r]
 
-
-async def load_from_url(url: str) -> List[str]:
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=15) as resp:
-                if resp.status == 200:
-                    text = await resp.text()
-                    return [l.strip() for l in text.split('\n') if l.strip() and not l.startswith('#')]
-    except: pass
-    return []
-
-
 async def main():
     xray_path = 'xray'
-    print("=" * 70)
-    print("🚀 PROXY CHECKER: VLESS & HYSTERIA2")
-    print("=" * 70)
+    print("=" * 70, flush=True)
+    print("🚀 PROXY CHECKER: VLESS & HYSTERIA2", flush=True)
+    print("=" * 70, flush=True)
 
     # 1. Загрузка SNI
     sni_url = 'https://raw.githubusercontent.com/Kotlas23412/proxy-checker/refs/heads/main/sni.txt'
@@ -241,17 +232,24 @@ async def main():
             lines = [l.strip() for l in f if l.strip()]
         for line in lines:
             if line.startswith('http'):
-                print(f"📥 Качаю список: {line[:50]}...")
-                proxies.extend(await load_from_url(line))
+                print(f"📥 Качаю список: {line}", flush=True)
+                fetched = await load_from_url(line)
+                print(f"   --- Найдено {len(fetched)} прокси", flush=True)
+                proxies.extend(fetched)
             else:
                 proxies.append(line)
     
-    proxies = list(set(proxies))
+    proxies = list(set(proxies)) # Убираем дубликаты
+    
+    # Ограничим количество для теста, если их слишком много (опционально)
+    # proxies = proxies[:500] 
+
     if not proxies:
-        print("❌ Нет прокси для проверки!")
+        print("❌ Нет прокси для проверки!", flush=True)
         return
 
-    print(f"✅ Найдено {len(proxies)} прокси. Начинаю...")
+    print(f"✅ Итого уникальных прокси: {len(proxies)}. Начинаю проверку...", flush=True)
+    
     results = await batch_check_proxies(proxies, test_domains, xray_path)
     
     working = [r for r in results if r.success_rate >= 50]
