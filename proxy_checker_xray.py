@@ -203,7 +203,7 @@ async def check_proxy(proxy_url: str, test_domains: List[str], xray_path: str, m
 
 async def batch_check_proxies(proxy_list: List[str], test_domains: List[str], xray_path: str) -> List[ProxyResult]:
     # Увеличиваем до 20 параллельных проверок для скорости
-    semaphore = asyncio.Semaphore(20) 
+    semaphore = asyncio.Semaphore(50) 
     
     async def sem_check(url, i):
         async with semaphore:
@@ -218,51 +218,49 @@ async def batch_check_proxies(proxy_list: List[str], test_domains: List[str], xr
 async def main():
     xray_path = 'xray'
     print("=" * 70, flush=True)
-    print("🚀 PROXY CHECKER: VLESS & HYSTERIA2", flush=True)
+    print("🚀 PROXY CHECKER: СЛУЧАЙНАЯ ВЫБОРКА", flush=True)
     print("=" * 70, flush=True)
 
     # 1. Загрузка SNI
     sni_url = 'https://raw.githubusercontent.com/Kotlas23412/proxy-checker/refs/heads/main/sni.txt'
     test_domains = await load_from_url(sni_url) or ['yandex.ru', 'google.com']
 
-    # 2. Загрузка прокси
+    # 2. Загрузка прокси из файла или по ссылкам
     proxies = []
     if os.path.exists('proxies.txt'):
         with open('proxies.txt', 'r') as f:
             lines = [l.strip() for l in f if l.strip()]
         for line in lines:
             if line.startswith('http'):
-                print(f"📥 Качаю список: {line}", flush=True)
-                fetched = await load_from_url(line)
-                print(f"   --- Найдено {len(fetched)} прокси", flush=True)
-                proxies.extend(fetched)
+                print(f"📥 Качаю список: {line[:60]}...", flush=True)
+                proxies.extend(await load_from_url(line))
             else:
                 proxies.append(line)
     
-    proxies = list(set(proxies)) # Убираем дубликаты
-    
-    # Ограничим количество для теста, если их слишком много (опционально)
-    # proxies = proxies[:500] 
+    proxies = list(set(proxies)) # Удаляем дубликаты
+    print(f"✅ Всего в базе найдено {len(proxies)} прокси.", flush=True)
 
-    if not proxies:
-        print("❌ Нет прокси для проверки!", flush=True)
-        return
+    # --- ЛИМИТ И ПЕРЕМЕШИВАНИЕ ---
+    random.shuffle(proxies) # Перемешиваем список
+    LIMIT = 2000 # Проверяем только 2000 случайных штук
+    proxies = proxies[:LIMIT]
+    print(f"🎲 Выбрано {len(proxies)} случайных прокси для проверки.", flush=True)
+    # -----------------------------
 
-    print(f"✅ Итого уникальных прокси: {len(proxies)}. Начинаю проверку...", flush=True)
-    
     results = await batch_check_proxies(proxies, test_domains, xray_path)
     
     working = [r for r in results if r.success_rate >= 50]
     
     if working:
         os.makedirs('working_proxies', exist_ok=True)
+        # Сохраняем по протоколам
         for proto in set(r.protocol for r in working):
             proto_results = sorted([r for r in working if r.protocol == proto], key=lambda x: x.score, reverse=True)
             with open(f'working_proxies/{proto}_top.txt', 'w') as f:
                 for r in proto_results: f.write(f"{r.url}\n")
-        print(f"✅ Готово! Найдено рабочих: {len(working)}")
+        print(f"✅ Готово! Найдено рабочих: {len(working)}", flush=True)
     else:
-        print("⚠️ Рабочих прокси не найдено.")
+        print("⚠️ Рабочих прокси не найдено.", flush=True)
 
 if __name__ == '__main__':
     asyncio.run(main())
