@@ -429,17 +429,19 @@ async def main():
     
     # Загружаем прокси
     print("\n📥 Загрузка прокси...")
-    print("Введите URL с прокси или путь к файлу:")
-    print("(Для примера используется тестовый прокси)")
     
-    # Пример
-    example_proxies = [
-        "vless://8b8f4dfb-cd48-4dab-bb75-b304971176cd@45.95.233.85:61873?security=reality&encryption=none&pbk=wEU32qHhiQq-FDYUvuEl7_HAM6r5nDh6M4F8WGnEhjE&headerType=none&fp=chrome&type=tcp&sni=yandex.ru&sid=34d8e80d8fa40501"
-    ]
-    
-    # Или загрузите с GitHub
-    # proxies = await load_from_url('https://raw.githubusercontent.com/YOUR_REPO/proxies.txt')
-    proxies = example_proxies
+    filename = 'proxies.txt'  # Убедитесь, что файл в репозитории называется так же
+    proxies = []
+
+    if os.path.exists(filename):
+        with open(filename, 'r', encoding='utf-8') as f:
+            proxies = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        print(f"✅ Загружено {len(proxies)} прокси из файла {filename}")
+    else:
+        print(f"❌ ОШИБКА: Файл {filename} не найден!")
+        # Список файлов для отладки, если не находит
+        print(f"Файлы в директории: {os.listdir('.')}")
+        return
     
     if not proxies:
         print("❌ Нет прокси для проверки")
