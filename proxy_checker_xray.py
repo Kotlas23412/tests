@@ -118,6 +118,29 @@ def parse_vless_url(url: str) -> Optional[Dict]:
         print(f"Ошибка парсинга VLESS: {e}")
         return None
 
+def parse_hysteria2_url(url: str) -> Optional[Dict]:
+    """Парсит Hysteria2 URL в конфигурацию xray"""
+    import urllib.parse
+    if not (url.startswith('hysteria2://') or url.startswith('hy2://')):
+        return None
+    try:
+        url_clean = url.replace('hysteria2://', '').replace('hy2://', '')
+        if '@' not in url_clean: return None
+        auth, rest = url_clean.split('@', 1)
+        if '?' in rest:
+            address, params_str = rest.split('?', 1)
+        else:
+            address, params_str = rest, ''
+        host, port = address.rsplit(':', 1)
+        params = {k: v[0] for k, v in urllib.parse.parse_qs(params_str).items()}
+        return {
+            'auth': auth,
+            'host': host,
+            'port': int(port),
+            'sni': params.get('sni', host),
+            'alpn': params.get('alpn', 'h3').split(',')
+        }
+    except: return None
 
 def create_xray_config(proxy_info: Dict, socks_port: int = 10808, http_port: int = 10809) -> Dict:
     """Создает конфигурацию xray-core для прокси"""
@@ -259,6 +282,7 @@ async def check_proxy(proxy_url: str, test_domains: List[str],
         proxy_info = parse_vless_url(proxy_url)
     elif proxy_url.startswith('hysteria2://') or proxy_url.startswith('hy2://'):
         protocol = 'hysteria2'
+        proxy_info = parse_hysteria2_url(proxy_url)
         # TODO: добавить парсинг Hysteria2
         print(f"⚠️  Hysteria2 пока не поддерживается")
         return None
@@ -429,25 +453,29 @@ async def main():
     
     # Загружаем прокси
     print("\n📥 Загрузка прокси...")
-    
-    filename = 'proxies.txt'  # Убедитесь, что файл в репозитории называется так же
-    proxies = []
+    filename = 'proxies.txt'
+    initial_lines = []
 
     if os.path.exists(filename):
         with open(filename, 'r', encoding='utf-8') as f:
-            proxies = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-        print(f"✅ Загружено {len(proxies)} прокси из файла {filename}")
+            initial_lines = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        print(f"✅ Прочитано {len(initial_lines)} строк из {filename}")
     else:
-        print(f"❌ ОШИБКА: Файл {filename} не найден!")
-        # Список файлов для отладки, если не находит
-        print(f"Файлы в директории: {os.listdir('.')}")
+        print(f"❌ Файл {filename} не найден!")
         return
-    
-    if not proxies:
-        print("❌ Нет прокси для проверки")
-        return
-    
-    print(f"✅ Загружено {len(proxies)} прокси")
+
+    proxies = []
+    for line in initial_lines:
+        if line.startswith('http'):
+            print(f"🌐 Загрузка прокси по ссылке: {line[:60]}...")
+            fetched = await load_from_url(line)
+            proxies.extend(fetched)
+        else:
+            proxies.append(line)
+
+    # Удаляем дубликаты
+    proxies = list(set(proxies))
+    print(f"✅ Итого получено {len(proxies)} уникальных прокси")
     
     # Запускаем проверку
     print(f"\n🔍 Начинаю проверку...")
