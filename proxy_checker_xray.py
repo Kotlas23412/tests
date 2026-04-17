@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Продвинутый Proxy Checker с xray-core
-Поддержка VLESS и Hysteria2
-"""
-
 import asyncio
 import aiohttp
 import json
@@ -14,7 +9,6 @@ import time
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 import random
-
 
 @dataclass
 class ProxyResult:
@@ -48,6 +42,17 @@ class ProxyResult:
             else: speed_score = max(0, 40 - (self.avg_latency - 5) * 8)
         return (self.success_rate * 0.7) + (speed_score * 0.3)
 
+async def load_from_url(url: str) -> List[str]:
+    """Загружает содержимое по ссылке"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=15) as resp:
+                if resp.status == 200:
+                    text = await resp.text()
+                    return [l.strip() for l in text.split('\n') if l.strip() and not l.startswith('#')]
+    except:
+        pass
+    return []
 
 def parse_vless_url(url: str) -> Optional[Dict]:
     import urllib.parse
@@ -74,7 +79,6 @@ def parse_vless_url(url: str) -> Optional[Dict]:
         }
     except: return None
 
-
 def parse_hysteria2_url(url: str) -> Optional[Dict]:
     import urllib.parse
     if not (url.startswith('hysteria2://') or url.startswith('hy2://')): return None
@@ -93,7 +97,6 @@ def parse_hysteria2_url(url: str) -> Optional[Dict]:
         }
     except: return None
 
-
 def create_xray_config(proxy_info: Dict, protocol: str, socks_port: int = 10808, http_port: int = 10809) -> Dict:
     config = {
         "log": {"loglevel": "warning"},
@@ -103,7 +106,6 @@ def create_xray_config(proxy_info: Dict, protocol: str, socks_port: int = 10808,
         ],
         "outbounds": []
     }
-
     if protocol == 'vless':
         outbound = {
             "protocol": "vless",
@@ -126,7 +128,6 @@ def create_xray_config(proxy_info: Dict, protocol: str, socks_port: int = 10808,
                 "serverName": proxy_info['sni'], "fingerprint": proxy_info['fp'], "alpn": proxy_info['alpn']
             }
         config['outbounds'].append(outbound)
-
     elif protocol == 'hysteria2':
         outbound = {
             "protocol": "hysteria2",
@@ -134,35 +135,28 @@ def create_xray_config(proxy_info: Dict, protocol: str, socks_port: int = 10808,
                 "servers": [{"address": proxy_info['host'], "port": proxy_info['port'], "auth": proxy_info['auth']}]
             },
             "streamSettings": {
-                "network": "udp",
-                "security": "tls",
+                "network": "udp", "security": "tls",
                 "tlsSettings": {"serverName": proxy_info['sni'], "alpn": proxy_info['alpn']}
             }
         }
         config['outbounds'].append(outbound)
-
     return config
 
-
-async def test_proxy_through_xray(xray_path: str, config: Dict, test_url: str, timeout: int = 15) -> Tuple[bool, float]:
+async def test_proxy_through_xray(xray_path: str, config: Dict, test_url: str, timeout: int = 10) -> Tuple[bool, float]:
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         json.dump(config, f)
         config_path = f.name
-    
     xray_process = None
     try:
         xray_process = subprocess.Popen([xray_path, '-config', config_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        await asyncio.sleep(2)
-        
+        await asyncio.sleep(1.5)
         http_port = config['inbounds'][1]['port']
         proxy_url = f'http://127.0.0.1:{http_port}'
         start_time = time.time()
-        
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.get(test_url, proxy=proxy_url, timeout=aiohttp.ClientTimeout(total=timeout), ssl=False) as response:
-                    if 200 <= response.status < 500:
-                        return True, time.time() - start_time
+                async with session.get(test_url, proxy=proxy_url, timeout=aiohttp.ClientTimeout(total=timeout), ssl=False) as resp:
+                    if 200 <= resp.status < 500: return True, time.time() - start_time
             except: pass
         return False, timeout
     finally:
@@ -171,22 +165,16 @@ async def test_proxy_through_xray(xray_path: str, config: Dict, test_url: str, t
             xray_process.wait()
         if os.path.exists(config_path): os.unlink(config_path)
 
-
-async def check_proxy(proxy_url: str, test_domains: List[str], xray_path: str, max_domains: int = 5) -> Optional[ProxyResult]:
+async def check_proxy(proxy_url: str, test_domains: List[str], xray_path: str, max_domains: int = 3) -> Optional[ProxyResult]:
     if proxy_url.startswith('vless://'):
-        protocol = 'vless'
-        proxy_info = parse_vless_url(proxy_url)
+        protocol, proxy_info = 'vless', parse_vless_url(proxy_url)
     elif proxy_url.startswith(('hysteria2://', 'hy2://')):
-        protocol = 'hysteria2'
-        proxy_info = parse_hysteria2_url(proxy_url)
+        protocol, proxy_info = 'hysteria2', parse_hysteria2_url(proxy_url)
     else: return None
-
     if not proxy_info: return None
-
     result = ProxyResult(url=proxy_url, protocol=protocol, host=proxy_info['host'], port=proxy_info['port'])
     test_sample = random.sample(test_domains, min(max_domains, len(test_domains)))
     xray_config = create_xray_config(proxy_info, protocol)
-
     latencies = []
     for domain in test_sample:
         success, latency = await test_proxy_through_xray(xray_path, xray_config, f"https://{domain}")
@@ -194,26 +182,19 @@ async def check_proxy(proxy_url: str, test_domains: List[str], xray_path: str, m
             result.success_count += 1
             result.working_domains.append(domain)
             latencies.append(latency)
-        else:
-            result.fail_count += 1
-    
+        else: result.fail_count += 1
     if latencies: result.avg_latency = sum(latencies) / len(latencies)
     return result
 
-
 async def batch_check_proxies(proxy_list: List[str], test_domains: List[str], xray_path: str) -> List[ProxyResult]:
-    # Увеличиваем до 20 параллельных проверок для скорости
-    semaphore = asyncio.Semaphore(50) 
-    
+    semaphore = asyncio.Semaphore(50)
     async def sem_check(url, i):
         async with semaphore:
-            # flush=True заставляет текст появляться в GitHub Actions мгновенно
-            print(f"[{i+1}/{len(proxy_list)}] Проверка {url[:40]}...", flush=True)
-            return await check_proxy(url, test_domains, xray_path)
-
+            if (i+1) % 10 == 0 or i == 0:
+                print(f"[{i+1}/{len(proxy_list)}] Проверка...", flush=True)
+            return await check_proxy(url, test_domains, xray_path, max_domains=3)
     tasks = [sem_check(url, i) for i, url in enumerate(proxy_list)]
-    results = await asyncio.gather(*tasks)
-    return [r for r in results if r]
+    return [r for r in await asyncio.gather(*tasks) if r]
 
 async def main():
     xray_path = 'xray'
@@ -221,46 +202,39 @@ async def main():
     print("🚀 PROXY CHECKER: СЛУЧАЙНАЯ ВЫБОРКА", flush=True)
     print("=" * 70, flush=True)
 
-    # 1. Загрузка SNI
     sni_url = 'https://raw.githubusercontent.com/Kotlas23412/proxy-checker/refs/heads/main/sni.txt'
     test_domains = await load_from_url(sni_url) or ['yandex.ru', 'google.com']
 
-    # 2. Загрузка прокси из файла или по ссылкам
     proxies = []
     if os.path.exists('proxies.txt'):
         with open('proxies.txt', 'r') as f:
             lines = [l.strip() for l in f if l.strip()]
         for line in lines:
             if line.startswith('http'):
-                print(f"📥 Качаю список: {line[:60]}...", flush=True)
+                print(f"📥 Загрузка списка: {line[:50]}...", flush=True)
                 proxies.extend(await load_from_url(line))
-            else:
-                proxies.append(line)
+            else: proxies.append(line)
     
-    proxies = list(set(proxies)) # Удаляем дубликаты
-    print(f"✅ Всего в базе найдено {len(proxies)} прокси.", flush=True)
+    proxies = list(set(proxies))
+    print(f"✅ База: {len(proxies)} прокси.", flush=True)
 
-    # --- ЛИМИТ И ПЕРЕМЕШИВАНИЕ ---
-    random.shuffle(proxies) # Перемешиваем список
-    LIMIT = 2000 # Проверяем только 2000 случайных штук
+    random.shuffle(proxies)
+    LIMIT = 2000 
     proxies = proxies[:LIMIT]
-    print(f"🎲 Выбрано {len(proxies)} случайных прокси для проверки.", flush=True)
-    # -----------------------------
+    print(f"🎲 Проверка {len(proxies)} случайных прокси...", flush=True)
 
     results = await batch_check_proxies(proxies, test_domains, xray_path)
-    
     working = [r for r in results if r.success_rate >= 50]
     
     if working:
         os.makedirs('working_proxies', exist_ok=True)
-        # Сохраняем по протоколам
         for proto in set(r.protocol for r in working):
-            proto_results = sorted([r for r in working if r.protocol == proto], key=lambda x: x.score, reverse=True)
+            proto_res = sorted([r for r in working if r.protocol == proto], key=lambda x: x.score, reverse=True)
             with open(f'working_proxies/{proto}_top.txt', 'w') as f:
-                for r in proto_results: f.write(f"{r.url}\n")
-        print(f"✅ Готово! Найдено рабочих: {len(working)}", flush=True)
+                for r in proto_res: f.write(f"{r.url}\n")
+        print(f"✅ Найдено рабочих: {len(working)}", flush=True)
     else:
-        print("⚠️ Рабочих прокси не найдено.", flush=True)
+        print("⚠️ Рабочих не найдено.", flush=True)
 
 if __name__ == '__main__':
     asyncio.run(main())
