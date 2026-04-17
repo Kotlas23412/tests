@@ -1,14 +1,4 @@
-# Пример файла с прокси
-# Добавьте сюда свои VLESS/Hysteria2 прокси (по одному на строку)
-
-# VLESS примеры:
-vless://8b8f4dfb-cd48-4dab-bb75-b304971176cd@45.95.233.85:61873?security=reality&encryption=none&pbk=wEU32qHhiQq-FDYUvuEl7_HAM6r5nDh6M4F8WGnEhjE&headerType=none&fp=chrome&type=tcp&sni=yandex.ru&sid=34d8e80d8fa40501
-
-# VLESS + TLS пример:
-# vless://your-uuid@your-server.com:443?security=tls&encryption=none&type=tcp&sni=your-domain.com&fp=chrome
-
-# Hysteria2 пример:
-# hysteria2://your-password@your-server.com:443?sni=your-domain.com&alpn=h3
-
-# Можно загружать прокси из GitHub:
-# https://raw.githubusercontent.com/username/repo/main/proxies.txt
+https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/split-by-protocols/hysteria2-secure.txt
+https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/split-by-protocols/hysteria2.txt
+https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/split-by-protocols/vless-secure-1.txt
+https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/split-by-protocols/vless-secure-2.txt
