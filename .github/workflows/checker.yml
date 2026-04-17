@@ -1,0 +1,49 @@
+name: Proxy Checker
+
+# Триггеры: когда запускать скрипт
+on:
+  workflow_dispatch: # Позволяет запускать проверку вручную по кнопке
+  schedule:
+    - cron: '0 0 * * *' # Автоматический запуск каждый день в 00:00 (по желанию)
+
+jobs:
+  check-proxies:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Скачиваем ваш репозиторий
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Устанавливаем Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. Устанавливаем зависимости Python
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Скачиваем и устанавливаем xray-core (Linux 64-bit)
+      - name: Install xray-core
+        run: |
+          wget https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          unzip Xray-linux-64.zip
+          chmod +x xray
+          sudo mv xray /usr/local/bin/
+          xray version
+
+      # 5. Запускаем скрипт
+      # Убедитесь, что в корне репозитория лежит файл proxies.txt с вашими прокси!
+      - name: Run Proxy Checker
+        run: python proxy_checker_xray.py
+
+      # 6. Сохраняем результаты (папку working_proxies) как артефакт
+      # Вы сможете скачать её zip-архивом после завершения проверки
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always() # Сохранить результаты, даже если скрипт завершился с ошибкой
+        with:
+          name: working_proxies_results
+          path: working_proxies/
