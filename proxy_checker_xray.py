@@ -196,7 +196,7 @@ def create_xray_config(proxy_info: Dict, socks_port: int = 10808, http_port: int
             "shortId": proxy_info.get('sid', ''),
             "publicKey": proxy_info.get('pbk', '')
         }
-    
+    if proxy_info.get('auth') and protocol == 'hysteria2': # Нужно передать protocol в функцию или определять внутри    
     # Добавляем настройки TLS
     elif proxy_info.get('security') == 'tls':
         config['outbounds'][0]['streamSettings']['tlsSettings'] = {
