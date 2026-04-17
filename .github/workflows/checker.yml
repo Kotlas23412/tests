@@ -29,7 +29,8 @@ jobs:
       - name: Install xray-core
         run: |
           wget https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          unzip Xray-linux-64.zip
+          # Добавляем флаг -o для автоматической перезаписи
+          unzip -o Xray-linux-64.zip 
           chmod +x xray
           sudo mv xray /usr/local/bin/
           xray version
