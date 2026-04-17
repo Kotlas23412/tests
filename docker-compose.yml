@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  proxy-checker:
+    build: .
+    container_name: proxy-checker
+    volumes:
+      # Монтируем файл с прокси
+      - ./proxies.txt:/app/proxies.txt:ro
+      # Монтируем директорию для результатов
+      - ./working_proxies:/app/working_proxies
+    environment:
+      - PYTHONUNBUFFERED=1
+    network_mode: host  # Для доступа к локальным портам xray
+    restart: unless-stopped
+
+# Использование:
+# 1. Создайте файл proxies.txt с вашими прокси
+# 2. docker-compose up --build
+# 3. Результаты будут в папке working_proxies/
